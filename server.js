@@ -73,8 +73,11 @@ app.use("/api", themeRoutes); // matches /api/theme
 app.use("/api/links", linkRoutes);
 app.use("/api", analyticsRoutes);
 
-// Register the webhook route directly BEFORE express.json()
-app.post('/api/payment/webhook', bodyParser.raw({ type: 'application/json' }), handleWebhook);
+// Debug middleware for webhook route
+app.post('/api/payment/webhook', bodyParser.raw({ type: 'application/json' }), (req, res, next) => {
+  console.log('RAW BODY TYPE:', typeof req.body, 'Is Buffer:', Buffer.isBuffer(req.body));
+  next();
+}, handleWebhook);
 
 // Now apply express.json() for all other routes
 app.use(express.json());
