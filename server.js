@@ -63,6 +63,12 @@ import bodyParser from 'body-parser';
 dotenv.config();
 const app = express();
 app.use(cors());
+
+// Register the Stripe webhook route first, with raw bodyParser
+app.post('/api/payment/webhook', bodyParser.raw({ type: 'application/json' }), handleWebhook);
+
+// Now apply express.json() and urlencoded for all other routes
+app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // ✅ Routes
@@ -73,14 +79,6 @@ app.use("/api", themeRoutes); // matches /api/theme
 app.use("/api/links", linkRoutes);
 app.use("/api", analyticsRoutes);
 
-// Debug middleware for webhook route
-app.post('/api/payment/webhook', bodyParser.raw({ type: 'application/json' }), (req, res, next) => {
-  console.log('RAW BODY TYPE:', typeof req.body, 'Is Buffer:', Buffer.isBuffer(req.body));
-  next();
-}, handleWebhook);
-
-// Now apply express.json() for all other routes
-app.use(express.json());
 
 // Register all other payment routes (and others)
 app.use("/api/payment", paymentRoutes);
