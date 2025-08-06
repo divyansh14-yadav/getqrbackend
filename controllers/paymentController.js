@@ -367,8 +367,8 @@ const handlePaymentIntentSucceeded = async (paymentIntent) => {
   // Customer se userId nikalo
   const customer = await stripe.customers.retrieve(customerId);
   const userId = customer.metadata?.userId;
-      console.log(customer,"customer)
-      console.log(userId,"userId)
+      console.log(customer,"customer")
+      console.log(userId,"userId")
                   
   
   if (userId) {
