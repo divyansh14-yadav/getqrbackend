@@ -380,17 +380,24 @@ const handlePaymentIntentSucceeded = async (paymentIntent) => {
               const invoice = await stripe.invoices.retrieve(charge.invoice);
               if (invoice.subscription) {
                 const subscription = await stripe.subscriptions.retrieve(invoice.subscription);
+                console.log("Subscription metadata:", subscription.metadata);
                 planType = subscription.metadata?.planType;
               }
             }
           } catch (err) {
-            console.log("Could not retrieve subscription metadata, using default");
+            console.log("Could not retrieve subscription metadata, using amount-based fallback");
           }
         }
 
-        // Fallback if planType is not set or invalid
+        // Fallback: Amount ke hisaab se plan type determine karo
         if (!planType || !["weekly", "monthly"].includes(planType)) {
-          planType = "monthly";
+          if (paymentIntent.amount === 9900) { // ₹99 = weekly
+            planType = "weekly";
+          } else if (paymentIntent.amount === 20000) { // ₹200 = monthly
+            planType = "monthly";
+          } else {
+            planType = "monthly"; // default fallback
+          }
         }
 
         user.subscription = planType;
