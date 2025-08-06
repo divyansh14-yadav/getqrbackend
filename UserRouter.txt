@@ -1,0 +1,148 @@
+import express from "express";
+import multer from "multer";
+import path from "path";
+import fs from "fs";
+import User from "../models/User.js";
+import authMiddleware from "../middleware/authMiddleware.js";
+import { adminOnly } from "../middleware/adminMiddleware.js";
+
+const router = express.Router();
+
+// ---- Setup File Storage ----
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    let dir = "uploads";
+
+    if (req.url.includes("upload-image")) {
+      dir = "uploads/profile";
+    } else if (req.url.includes("profile-media")) {
+      dir = "uploads/headers";
+    }
+
+    fs.mkdirSync(dir, { recursive: true });
+    cb(null, dir);
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    const filename = req.url.includes("upload-image")
+      ? `profile-${req.user.id}${ext}`
+      : `${Date.now()}${ext}`;
+    cb(null, filename);
+  },
+});
+const upload = multer({ storage });
+
+// ---- Routes ----
+
+// ✅ Get current logged-in user with getFeatureAccess + role
+router.get("/profile", authMiddleware, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select("-password");
+    if (!user) return res.status(404).json({ message: "User not found" });
+    console.log("✅ Returning user profile:", user);
+
+    res.json({
+      ...user.toObject(),
+      getFeatureAccess: user.getFeatureAccess?.() || {},
+    });
+  } catch (err) {
+    res.status(500).json({ message: "Failed to fetch profile", error: err.message });
+  }
+});
+
+// Public profile for QR page rendering
+router.get("/public/:username", async (req, res) => {
+  try {
+    const user = await User.findOne({ username: req.params.username }).select(
+      "username displayName bio profileImage links headerImage introText"
+    );
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Fallbacks
+    if (!user.links) user.links = [];
+    if (!user.profileImage) user.profileImage = "/profile-placeholder.png";
+
+    res.json(user);
+  } catch (err) {
+    res.status(500).json({ message: "Error loading public profile" });
+  }
+});
+
+// Update profile fields (display name, bio, links)
+router.put("/update", authMiddleware, async (req, res) => {
+  const { displayName, bio, links } = req.body;
+  try {
+    const user = await User.findByIdAndUpdate(
+      req.user.id,
+      { displayName, bio, links },
+      { new: true }
+    ).select("-password");
+    res.json(user);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to update profile." });
+  }
+});
+
+// Upload profile image
+router.post("/upload-image", authMiddleware, upload.single("image"), async (req, res) => {
+  try {
+    const imageUrl = `/uploads/profile/${req.file.filename}`;
+    await User.findByIdAndUpdate(req.user.id, { profileImage: imageUrl });
+    res.json({ imageUrl });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to upload image." });
+  }
+});
+
+// Upload header image and intro text
+router.put("/profile-media", authMiddleware, upload.single("headerImage"), async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    if (req.body.introText) user.introText = req.body.introText;
+    if (req.file) user.headerImage = `/uploads/headers/${req.file.filename}`;
+
+    await user.save();
+    res.json({
+      message: "Updated successfully",
+      headerImage: user.headerImage,
+      introText: user.introText,
+    });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to upload header media." });
+  }
+});
+
+// Change password
+router.put("/password", authMiddleware, async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+  const user = await User.findById(req.user.id);
+
+  if (!user || !(await user.matchPassword(currentPassword))) {
+    return res.status(401).json({ message: "Incorrect current password" });
+  }
+
+  user.password = newPassword;
+  await user.save();
+  res.json({ message: "Password updated" });
+});
+
+// Logout all devices
+router.post("/logoutAll", authMiddleware, async (req, res) => {
+  const user = await User.findById(req.user.id);
+  user.deviceId = null;
+  await user.save();
+  res.json({ message: "Logged out all devices" });
+});
+
+// Delete account
+router.delete("/", authMiddleware, async (req, res) => {
+  await User.findByIdAndDelete(req.user.id);
+  res.json({ message: "Account deleted" });
+});
+
+export default router;

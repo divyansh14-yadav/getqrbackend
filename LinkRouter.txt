@@ -1,0 +1,68 @@
+import express from "express";
+import User from "../models/User.js";
+import authMiddleware from "../middleware/authMiddleware.js";
+
+const router = express.Router();
+
+// GET all links for current user
+router.get("/", authMiddleware, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select("links");
+    if (!user) return res.status(404).json({ message: "User not found" });
+    res.json(user.links);
+  } catch (err) {
+    res.status(500).json({ message: "Failed to fetch links", error: err.message });
+  }
+});
+
+// POST new link
+router.post("/", authMiddleware, async (req, res) => {
+  const { platform, url } = req.body;
+  if (!platform || !url) return res.status(400).json({ message: "Platform and URL required" });
+
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    user.links.push({ platform, url });
+    await user.save();
+    res.status(201).json(user.links);
+  } catch (err) {
+    res.status(500).json({ message: "Failed to add link", error: err.message });
+  }
+});
+
+// PUT update link by index
+router.put("/:index", authMiddleware, async (req, res) => {
+  const { platform, url } = req.body;
+  const index = parseInt(req.params.index);
+
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user || !user.links[index]) return res.status(404).json({ message: "Link not found" });
+
+    user.links[index] = { platform, url };
+    await user.save();
+    res.json(user.links);
+  } catch (err) {
+    res.status(500).json({ message: "Failed to update link", error: err.message });
+  }
+});
+
+// DELETE link by index
+router.delete("/:index", authMiddleware, async (req, res) => {
+  const index = parseInt(req.params.index);
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user || index < 0 || index >= user.links.length) {
+      return res.status(404).json({ message: "Link not found" });
+    }
+    user.links.splice(index, 1);
+    await user.save();
+    res.json(user.links);
+  } catch (err) {
+    res.status(500).json({ message: "Failed to delete link", error: err.message });
+  }
+});
+
+export default router
