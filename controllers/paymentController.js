@@ -90,81 +90,41 @@ export const handleWebhook = async (req, res) => {
   let event;
 
   try {
-    event = stripe.webhooks.constructEvent(
-      req.body,
-      sig,
-      process.env.WEBHOOKS_URL
-    );
+    event = stripe.webhooks.constructEvent(req.body, sig, process.env.WEBHOOKS_URL);
+    
   } catch (err) {
-    console.error('❌ Webhook signature verification failed:', err.message);
+    console.error('Webhook signature verification failed:', err.message);
     return res.status(400).send(`Webhook Error: ${err.message}`);
+ 
   }
+
+
+
 
   try {
     switch (event.type) {
-      // ✅ Most reliable event after checkout completes
-      case 'checkout.session.completed': {
-        const session = event.data.object;
-        console.log("⚡ checkout.session.completed:", session);
-
-        if (session.subscription) {
-          const subscription = await stripe.subscriptions.retrieve(session.subscription);
-          console.log("🔍 Retrieved subscription with metadata:", subscription.metadata);
-          await handleSubscriptionUpdate(subscription);
-        }
-        break;
-      }
-
-      // ✅ On subscription creation & update directly
       case 'customer.subscription.created':
-      case 'customer.subscription.updated': {
-        const subscription = event.data.object;
-        console.log(`⚡ ${event.type} metadata:`, subscription.metadata);
-        await handleSubscriptionUpdate(subscription);
+      case 'customer.subscription.updated':
+        await handleSubscriptionUpdate(event.data.object);
         break;
-      }
-
-      // ✅ On cancellation
-      case 'customer.subscription.deleted': {
-        const subscription = event.data.object;
-        console.log("⚡ Subscription cancelled:", subscription.metadata);
-        await handleSubscriptionCancellation(subscription);
+      case 'customer.subscription.deleted':
+        await handleSubscriptionCancellation(event.data.object);
         break;
-      }
-
-      // ✅ On payment success
-      case 'invoice.payment_succeeded': {
-        const invoice = event.data.object;
-        if (invoice.subscription) {
-          const subscription = await stripe.subscriptions.retrieve(invoice.subscription);
-          console.log("💰 Payment succeeded. Updating subscription.");
-          await handleSubscriptionUpdate(subscription);
-        }
+      case 'invoice.payment_succeeded':
+        await handlePaymentSucceeded(event.data.object);
         break;
-      }
-
-      // ✅ On payment failure
-      case 'invoice.payment_failed': {
-        const invoice = event.data.object;
-        if (invoice.subscription) {
-          const subscription = await stripe.subscriptions.retrieve(invoice.subscription);
-          console.log("⚠️ Payment failed. Deactivating user.");
-          await handlePaymentFailed(subscription);
-        }
+      case 'invoice.payment_failed':
+        await handlePaymentFailed(event.data.object);
         break;
-      }
-
-      default:
-        console.log(`⚠️ Unhandled event type: ${event.type}`);
     }
 
     res.json({ received: true });
   } catch (err) {
-    console.error('❌ Webhook processing error:', err);
+    console.error('Webhook processing error:', err);
     res.status(500).json({ error: 'Webhook processing failed' });
   }
-};
 
+};
 const handleSubscriptionUpdate = async (subscription) => {
   const userId = subscription.metadata?.userId;
   const planType = subscription.metadata?.planType;
@@ -181,6 +141,7 @@ const handleSubscriptionUpdate = async (subscription) => {
 
   await user.save();
 };
+
 const handleSubscriptionCancellation = async (subscription) => {
   const userId = subscription.metadata?.userId;
   if (!userId) return;
@@ -194,6 +155,33 @@ const handleSubscriptionCancellation = async (subscription) => {
 
   await user.save();
   console.log(`❌ Subscription cancelled for user ${userId}`);
+};
+
+const handlePaymentSucceeded = async (invoice) => {
+  // Get metadata from invoice lines
+  const line = invoice.lines && invoice.lines.data && invoice.lines.data[0];
+  if (!line || !line.metadata || !line.metadata.userId || !line.metadata.planType) {
+    console.log("No metadata found in invoice lines");
+    return;
+  }
+
+  const userId = line.metadata.userId;
+  const planType = line.metadata.planType;
+
+  const user = await User.findById(userId);
+  if (!user) return;
+
+  // Calculate subscription expiration
+  // Stripe invoice has period info
+  const currentPeriodEnd = new Date(line.period.end * 1000);
+
+  user.subscription = planType;
+  user.subscriptionExpires = currentPeriodEnd;
+  user.stripeCustomerId = invoice.customer;
+  user.stripeSubscriptionId = invoice.subscription;
+  user.isActive = true;
+
+  await user.save();
 };
 
 const handlePaymentFailed = async (subscription) => {
