@@ -355,29 +355,43 @@ export const handleWebhook = async (req, res) => {
 
 const handlePaymentIntentSucceeded = async (paymentIntent) => {
   console.log("Payment Intent Success:", paymentIntent);
-  
+
   const customerId = paymentIntent.customer;
-  
   if (!customerId) {
     console.log("No customer ID in payment intent");
     return;
   }
-  
+
   // Customer se userId nikalo
   const customer = await stripe.customers.retrieve(customerId);
   const userId = customer.metadata?.userId;
-  
+
   if (userId) {
     const user = await User.findById(userId);
     if (user) {
       if (paymentIntent.description === "Subscription creation") {
-        // Payment Intent metadata se plan type nikalo
-        const planType = paymentIntent.metadata?.planType || "monthly"; // fallback
-        
+        let planType = ""; // default
+
+        // Try to get subscription from latest charge->invoice->subscription
+        if (paymentIntent.latest_charge) {
+          try {
+            const charge = await stripe.charges.retrieve(paymentIntent.latest_charge);
+            if (charge.invoice) {
+              const invoice = await stripe.invoices.retrieve(charge.invoice);
+              if (invoice.subscription) {
+                const subscription = await stripe.subscriptions.retrieve(invoice.subscription);
+                planType = subscription.metadata?.planType || "";
+              }
+            }
+          } catch (err) {
+            console.log("Could not retrieve subscription metadata, using default");
+          }
+        }
+
         user.subscription = planType;
         user.isActive = true;
         user.stripeCustomerId = customerId;
-        
+
         // Subscription expiration set karo (plan type ke hisaab se)
         const currentPeriodEnd = new Date();
         if (planType === "weekly") {
@@ -386,7 +400,7 @@ const handlePaymentIntentSucceeded = async (paymentIntent) => {
           currentPeriodEnd.setDate(currentPeriodEnd.getDate() + 30); // monthly
         }
         user.subscriptionExpires = currentPeriodEnd;
-        
+
         await user.save();
         console.log("User updated from payment intent:", user);
       }
