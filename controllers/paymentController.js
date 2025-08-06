@@ -1,10 +1,13 @@
 import Stripe from 'stripe';
 import User from '../models/User.js';
+import dotenv from "dotenv"
 
-const stripe = new Stripe("sk_test_51R24TDCLdUumWpxRyLv8HRxZtUMh3Ey5zVHQCS4ZO4xrEpfNONe4BI1QR1a9afbw86A54MWCPNYmqBIBBRw9VY4c00Pb5NJH8J");
+dotenv.config()
 
-const STRIPE_WEEKLY_PRICE_ID = "prod_Sod58idnH0qjbQ";
-const STRIPE_MONTHLY_PRICE_ID = "price_1RszwaCLdUumWpxRnCTHLdxG";
+const stripe = new Stripe(process.env.STRIPE_SECRET);
+
+const STRIPE_WEEKLY_PRICE_ID = process.env.STRIPE_WEEKLY_PRICE_ID;
+const STRIPE_MONTHLY_PRICE_ID = process.env.STRIPE_MONTHLY_PRICE_ID;
 
 
 export const createCheckoutSession = async (req, res) => {
@@ -122,7 +125,7 @@ export const handleWebhook = async (req, res) => {
 
   let event;
   try {
-    event = stripe.webhooks.constructEvent(req.body, sig, "whsec_9crVNFoKBbDIBkYy47rUokrUReAMV7rG"); // your webhook secret
+    event = stripe.webhooks.constructEvent(req.body, sig, process.env.WEBHOOKS_URL); // your webhook secret
   } catch (err) {
     console.error("❌ Webhook signature verification failed:", err.message);
     return res.status(400).send(`Webhook Error: ${err.message}`);
