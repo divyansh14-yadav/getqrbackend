@@ -10,7 +10,7 @@
 // export default router;
 
 import express from 'express';
-import { createCheckoutSession, createPortalSession, handleWebhook } from '../controllers/paymentController.js';
+import { createCheckoutSession, createPortalSession } from '../controllers/paymentController.js';
 import authMiddleware from "../middleware/authMiddleware.js";
 import bodyParser from 'body-parser';
 const router = express.Router();
