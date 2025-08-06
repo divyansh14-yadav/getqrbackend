@@ -10,6 +10,9 @@ const STRIPE_WEEKLY_PRICE_ID = process.env.STRIPE_WEEKLY_PRICE_ID;
 const STRIPE_MONTHLY_PRICE_ID = process.env.STRIPE_MONTHLY_PRICE_ID;
 
 
+
+
+
 export const createCheckoutSession = async (req, res) => {
   try {
     const { planType } = req.body; // 'weekly' or 'monthly'
