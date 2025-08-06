@@ -49,7 +49,7 @@ export const createCheckoutSession = async (req, res) => {
         userId: userId,
         planType: planType
       },
-      subscription_data: {
+      subscription: {
         metadata: {
           userId: userId,
           planType: planType
@@ -166,22 +166,11 @@ export const handleWebhook = async (req, res) => {
 };
 
 const handleSubscriptionUpdate = async (subscription) => {
-  console.log("[Webhook] handleSubscriptionUpdate called. Subscription object:", subscription);
   const userId = subscription.metadata?.userId;
   const planType = subscription.metadata?.planType;
 
-  if (!userId) {
-    console.error("[Webhook] No userId found in subscription metadata.", subscription.metadata);
-    return;
-  }
-
   const user = await User.findById(userId);
-  if (!user) {
-    console.error([Webhook] No user found with userId: ${userId});
-    return;
-  }
 
-  // Calculate subscription expiration
   const currentPeriodEnd = new Date(subscription.current_period_end * 1000);
 
   user.subscription = planType;
@@ -191,7 +180,6 @@ const handleSubscriptionUpdate = async (subscription) => {
   user.isActive = subscription.status === 'active';
 
   await user.save();
-  console.log([Webhook] Subscription updated for userId: ${userId}, planType: ${planType}, expires: ${currentPeriodEnd});
 };
 const handleSubscriptionCancellation = async (subscription) => {
   const userId = subscription.metadata?.userId;
