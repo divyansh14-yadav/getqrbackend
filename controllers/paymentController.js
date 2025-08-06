@@ -160,6 +160,7 @@ const handleSubscriptionCancellation = async (subscription) => {
   console.log(`❌ Subscription cancelled for user ${userId}`);
 };
 const handlePaymentSucceeded = async (invoice) => {
+  console.log("called")
   let lines = invoice.lines?.data;
   if (!lines) {
     const fullInvoice = await stripe.invoices.retrieve(invoice.id, { expand: ['lines'] });
@@ -169,6 +170,8 @@ const handlePaymentSucceeded = async (invoice) => {
   for (const line of lines) {
     console.log("LINE METADATA:", line.metadata);
     const { userId, planType } = line.metadata || {};
+    console.log(userId,"userId")
+    console.log(planType,"planType")
     if (userId && planType) {
       const user = await User.findById(userId);
       if (!user) {
