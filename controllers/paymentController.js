@@ -90,51 +90,98 @@ export const handleWebhook = async (req, res) => {
   let event;
 
   try {
-    event = stripe.webhooks.constructEvent(req.body, sig, process.env.WEBHOOKS_URL);
-    console.log(event.type,"12121212121212")
-    console.log(event.type.object,"787878787877")
+    event = stripe.webhooks.constructEvent(
+      req.body,
+      sig,
+      process.env.WEBHOOKS_URL
+    );
   } catch (err) {
-    console.error('Webhook signature verification failed:', err.message);
+    console.error('❌ Webhook signature verification failed:', err.message);
     return res.status(400).send(`Webhook Error: ${err.message}`);
- 
   }
 
   try {
     switch (event.type) {
+      // ✅ Most reliable event after checkout completes
+      case 'checkout.session.completed': {
+        const session = event.data.object;
+        console.log("⚡ checkout.session.completed:", session);
+
+        if (session.subscription) {
+          const subscription = await stripe.subscriptions.retrieve(session.subscription);
+          console.log("🔍 Retrieved subscription with metadata:", subscription.metadata);
+          await handleSubscriptionUpdate(subscription);
+        }
+        break;
+      }
+
+      // ✅ On subscription creation & update directly
       case 'customer.subscription.created':
-      case 'customer.subscription.updated':
-        await handleSubscriptionUpdate(event.data.object);
+      case 'customer.subscription.updated': {
+        const subscription = event.data.object;
+        console.log(`⚡ ${event.type} metadata:`, subscription.metadata);
+        await handleSubscriptionUpdate(subscription);
         break;
-      case 'customer.subscription.deleted':
-        await handleSubscriptionCancellation(event.data.object);
+      }
+
+      // ✅ On cancellation
+      case 'customer.subscription.deleted': {
+        const subscription = event.data.object;
+        console.log("⚡ Subscription cancelled:", subscription.metadata);
+        await handleSubscriptionCancellation(subscription);
         break;
-      case 'invoice.payment_succeeded':
-        await handlePaymentSucceeded(event.data.object);
+      }
+
+      // ✅ On payment success
+      case 'invoice.payment_succeeded': {
+        const invoice = event.data.object;
+        if (invoice.subscription) {
+          const subscription = await stripe.subscriptions.retrieve(invoice.subscription);
+          console.log("💰 Payment succeeded. Updating subscription.");
+          await handleSubscriptionUpdate(subscription);
+        }
         break;
-      case 'invoice.payment_failed':
-        await handlePaymentFailed(event.data.object);
+      }
+
+      // ✅ On payment failure
+      case 'invoice.payment_failed': {
+        const invoice = event.data.object;
+        if (invoice.subscription) {
+          const subscription = await stripe.subscriptions.retrieve(invoice.subscription);
+          console.log("⚠️ Payment failed. Deactivating user.");
+          await handlePaymentFailed(subscription);
+        }
         break;
+      }
+
+      default:
+        console.log(`⚠️ Unhandled event type: ${event.type}`);
     }
 
     res.json({ received: true });
   } catch (err) {
-    console.error('Webhook processing error:', err);
+    console.error('❌ Webhook processing error:', err);
     res.status(500).json({ error: 'Webhook processing failed' });
   }
 };
 
 const handleSubscriptionUpdate = async (subscription) => {
-  const userId = subscription.metadata.userId;
-  const planType = subscription.metadata.planType;
-  
-  if (!userId) return;
+  const userId = subscription.metadata?.userId;
+  const planType = subscription.metadata?.planType;
+
+  if (!userId) {
+    console.warn("❌ No userId in metadata.");
+    return;
+  }
 
   const user = await User.findById(userId);
-  if (!user) return;
+  if (!user) {
+    console.warn(`❌ No user found with ID: ${userId}`);
+    return;
+  }
 
-  // Calculate subscription expiration
   const currentPeriodEnd = new Date(subscription.current_period_end * 1000);
-  
+
   user.subscription = planType;
   user.subscriptionExpires = currentPeriodEnd;
   user.stripeCustomerId = subscription.customer;
@@ -142,11 +189,11 @@ const handleSubscriptionUpdate = async (subscription) => {
   user.isActive = subscription.status === 'active';
 
   await user.save();
+  console.log(`✅ Subscription updated for user ${userId}`);
 };
 
 const handleSubscriptionCancellation = async (subscription) => {
-  const userId = subscription.metadata.userId;
-  
+  const userId = subscription.metadata?.userId;
   if (!userId) return;
 
   const user = await User.findById(userId);
@@ -157,26 +204,17 @@ const handleSubscriptionCancellation = async (subscription) => {
   user.isActive = false;
 
   await user.save();
+  console.log(`❌ Subscription cancelled for user ${userId}`);
 };
 
-const handlePaymentSucceeded = async (invoice) => {
-  if (invoice.subscription) {
-    const subscription = await stripe.subscriptions.retrieve(invoice.subscription);
-    await handleSubscriptionUpdate(subscription);
-  }
-};
+const handlePaymentFailed = async (subscription) => {
+  const userId = subscription.metadata?.userId;
+  if (!userId) return;
 
-const handlePaymentFailed = async (invoice) => {
-  if (invoice.subscription) {
-    const subscription = await stripe.subscriptions.retrieve(invoice.subscription);
-    const userId = subscription.metadata.userId;
-    
-    if (userId) {
-      const user = await User.findById(userId);
-      if (user) {
-        user.isActive = false;
-        await user.save();
-      }
-    }
-  }
+  const user = await User.findById(userId);
+  if (!user) return;
+
+  user.isActive = false;
+  await user.save();
+  console.log(`🚫 Payment failed: user ${userId} deactivated`);
 };
