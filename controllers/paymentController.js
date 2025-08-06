@@ -86,57 +86,39 @@ export const createPortalSession = async (req, res) => {
 };
 
 export const handleWebhook = async (req, res) => {
-  // const sig = req.headers['stripe-signature'];
-  // let event;
-
-  // try {
-  //   event = stripe.webhooks.constructEvent(req.body, sig, "whsec_9crVNFoKBbDIBkYy47rUokrUReAMV7rG");
-  // } catch (err) {
-  //   console.error('Webhook signature verification failed:', err.message);
-  //   return res.status(400).send(`Webhook Error: ${err.message}`);
- 
-  // }
-
-  // try {
-  //   switch (event.type) {
-  //     case 'customer.subscription.created':
-  //     case 'customer.subscription.updated':
-  //       await handleSubscriptionUpdate(event.data.object);
-  //       break;
-  //     case 'customer.subscription.deleted':
-  //       await handleSubscriptionCancellation(event.data.object);
-  //       break;
-  //     case 'invoice.payment_succeeded':
-  //       await handlePaymentSucceeded(event.data.object);
-  //       break;
-  //     case 'invoice.payment_failed':
-  //       await handlePaymentFailed(event.data.object);
-  //       break;
-  //   }
-
-  //   res.json({ received: true });
-  // } catch (err) {
-  //   console.error('Webhook processing error:', err);
-  //   res.status(500).json({ error: 'Webhook processing failed' });
-  // }
-
-  const sig = req.headers["stripe-signature"];
-  if (!sig) {
-    console.error("❌ No stripe-signature header provided.");
-    return res.status(400).send("Webhook Error: No stripe-signature header value was provided.");
-  }
-
+  const sig = req.headers['stripe-signature'];
   let event;
+
   try {
-    event = stripe.webhooks.constructEvent(req.body, sig, process.env.WEBHOOKS_URL); // your webhook secret
+    event = stripe.webhooks.constructEvent(req.body, sig, process.env.WEBHOOKS_URL);
   } catch (err) {
-    console.error("❌ Webhook signature verification failed:", err.message);
+    console.error('Webhook signature verification failed:', err.message);
     return res.status(400).send(`Webhook Error: ${err.message}`);
+ 
   }
 
-  // ✅ Process the event
-  console.log("✅ Webhook Event Type:", event.type);
-  res.status(200).json({ received: true });
+  try {
+    switch (event.type) {
+      case 'customer.subscription.created':
+      case 'customer.subscription.updated':
+        await handleSubscriptionUpdate(event.data.object);
+        break;
+      case 'customer.subscription.deleted':
+        await handleSubscriptionCancellation(event.data.object);
+        break;
+      case 'invoice.payment_succeeded':
+        await handlePaymentSucceeded(event.data.object);
+        break;
+      case 'invoice.payment_failed':
+        await handlePaymentFailed(event.data.object);
+        break;
+    }
+
+    res.json({ received: true });
+  } catch (err) {
+    console.error('Webhook processing error:', err);
+    res.status(500).json({ error: 'Webhook processing failed' });
+  }
 };
 
 const handleSubscriptionUpdate = async (subscription) => {
