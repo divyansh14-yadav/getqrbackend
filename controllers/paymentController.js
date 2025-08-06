@@ -105,6 +105,7 @@ export const handleWebhook = async (req, res) => {
 
 
   try {
+     console.log("Received event type:", event.type);
     switch (event.type) {
       case 'customer.subscription.created':
       case 'customer.subscription.updated':
