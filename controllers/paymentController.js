@@ -87,10 +87,13 @@ export const createPortalSession = async (req, res) => {
 
 export const handleWebhook = async (req, res) => {
   const sig = req.headers['stripe-signature'];
+    console.log('SIG:', sig);
+  console.log('RAW BODY:', req.body);
+  console.log('SECRET:', process.env.STRIPE_WEBHOOK_SECRET);
   let event;
 
   try {
-    event = stripe.webhooks.constructEvent(req.body, sig, process.env.WEBHOOKS_URL);
+    event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
     
   } catch (err) {
     console.error('Webhook signature verification failed:', err.message);
