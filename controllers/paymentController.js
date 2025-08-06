@@ -207,7 +207,6 @@
 
 
 
-
 import Stripe from 'stripe';
 import User from '../models/User.js';
 import dotenv from "dotenv"
@@ -358,6 +357,20 @@ const handlePaymentIntentSucceeded = async (paymentIntent) => {
   if (userId) {
     const user = await User.findById(userId);
     if (user) {
+      // Ensure Stripe customer exists and has userId in metadata
+      let customer;
+      if (user.stripeCustomerId) {
+        customer = await stripe.customers.update(user.stripeCustomerId, {
+          metadata: { userId }
+        });
+      } else {
+        customer = await stripe.customers.create({
+          email: user.email,
+          metadata: { userId }
+        });
+        user.stripeCustomerId = customer.id;
+        await user.save();
+      }
       // Plan type subscription metadata se nikalo ya default set karo
       if (paymentIntent.description === "Subscription creation") {
         // Default plan set karo (ya fir subscription metadata se nikalo)
