@@ -160,7 +160,6 @@ const handleSubscriptionCancellation = async (subscription) => {
   console.log(`❌ Subscription cancelled for user ${userId}`);
 };
 const handlePaymentSucceeded = async (invoice) => {
-  // Stripe may not expand line items by default, so fetch them if not present
   let lines = invoice.lines?.data;
   if (!lines) {
     const fullInvoice = await stripe.invoices.retrieve(invoice.id, { expand: ['lines'] });
@@ -168,20 +167,26 @@ const handlePaymentSucceeded = async (invoice) => {
   }
 
   for (const line of lines) {
+    console.log("LINE METADATA:", line.metadata);
     const { userId, planType } = line.metadata || {};
     if (userId && planType) {
-      await handleSubscriptionUpdate({
-        ...invoice,
-        metadata: { userId, planType },
-        current_period_end: Math.floor((line.period?.end || Date.now() / 1000)),
-        customer: invoice.customer,
-        id: invoice.subscription,
-        status: 'active', // Invoice paid, so active
-      });
+      const user = await User.findById(userId);
+      if (!user) {
+        console.log("User not found for userId:", userId);
+        continue;
+      }
+      // Calculate subscription expiration
+      const currentPeriodEnd = new Date(line.period.end * 1000);
+      user.subscription = planType;
+      user.subscriptionExpires = currentPeriodEnd;
+      user.stripeCustomerId = invoice.customer;
+      user.stripeSubscriptionId = invoice.subscription;
+      user.isActive = true;
+      await user.save();
+      console.log("User updated:", user);
     }
   }
 };
-
 const handlePaymentFailed = async (subscription) => {
   const userId = subscription.metadata?.userId;
   if (!userId) return;
