@@ -157,36 +157,26 @@ const handleSubscriptionCancellation = async (subscription) => {
   console.log(`❌ Subscription cancelled for user ${userId}`);
 };
 const handlePaymentSucceeded = async (invoice) => {
-  const line = invoice.lines && invoice.lines.data && invoice.lines.data[0];
-  if (!line || !line.metadata || !line.metadata.userId || !line.metadata.planType) {
-    console.log("❌ No metadata found in invoice lines");
-    return;
+  // Stripe may not expand line items by default, so fetch them if not present
+  let lines = invoice.lines?.data;
+  if (!lines) {
+    const fullInvoice = await stripe.invoices.retrieve(invoice.id, { expand: ['lines'] });
+    lines = fullInvoice.lines.data;
   }
 
-  const userId = line.metadata.userId;
-  const planType = line.metadata.planType;
-
-  const currentPeriodEnd = new Date(line.period.end * 1000);
-
-  // ✅ Use findByIdAndUpdate to update directly
-  const updatedUser = await User.findByIdAndUpdate(
-    userId,
-    {
-      subscription: planType,
-      subscriptionExpires: currentPeriodEnd,
-      stripeCustomerId: invoice.customer,
-      stripeSubscriptionId: invoice.subscription,
-      isActive: true
-    },
-    { new: true } // Return the updated document
-  );
-
-  if (!updatedUser) {
-    console.warn(`❌ User not found with ID: ${userId}`);
-    return;
+  for (const line of lines) {
+    const { userId, planType } = line.metadata || {};
+    if (userId && planType) {
+      await handleSubscriptionUpdate({
+        ...invoice,
+        metadata: { userId, planType },
+        current_period_end: Math.floor((line.period?.end || Date.now() / 1000)),
+        customer: invoice.customer,
+        id: invoice.subscription,
+        status: 'active', // Invoice paid, so active
+      });
+    }
   }
-
-  console.log(`✅ User ${updatedUser.email} subscription updated to ${planType}`);
 };
 
 const handlePaymentFailed = async (subscription) => {
