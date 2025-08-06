@@ -356,7 +356,6 @@ export const handleWebhook = async (req, res) => {
 const handlePaymentIntentSucceeded = async (paymentIntent) => {
   console.log("Payment Intent Success:", paymentIntent);
   
-  // Payment Intent me customer ID hai
   const customerId = paymentIntent.customer;
   
   if (!customerId) {
@@ -367,37 +366,25 @@ const handlePaymentIntentSucceeded = async (paymentIntent) => {
   // Customer se userId nikalo
   const customer = await stripe.customers.retrieve(customerId);
   const userId = customer.metadata?.userId;
-      console.log(customer,"customer")
-      console.log(userId,"userId")
-                  
   
   if (userId) {
     const user = await User.findById(userId);
     if (user) {
-      // Ensure Stripe customer exists and has userId in metadata
-      let customer;
-      if (user.stripeCustomerId) {
-        customer = await stripe.customers.update(user.stripeCustomerId, {
-          metadata: { userId }
-        });
-      } else {
-        customer = await stripe.customers.create({
-          email: user.email,
-          metadata: { userId }
-        });
-        user.stripeCustomerId = customer.id;
-        await user.save();
-      }
-      // Plan type subscription metadata se nikalo ya default set karo
       if (paymentIntent.description === "Subscription creation") {
-        // Default plan set karo (ya fir subscription metadata se nikalo)
-        user.subscription = "monthly"; // ya jo plan aap chahte ho
+        // Payment Intent metadata se plan type nikalo
+        const planType = paymentIntent.metadata?.planType || "monthly"; // fallback
+        
+        user.subscription = planType;
         user.isActive = true;
         user.stripeCustomerId = customerId;
         
-        // Subscription expiration set karo (30 days for monthly)
+        // Subscription expiration set karo (plan type ke hisaab se)
         const currentPeriodEnd = new Date();
-        currentPeriodEnd.setDate(currentPeriodEnd.getDate() + 30);
+        if (planType === "weekly") {
+          currentPeriodEnd.setDate(currentPeriodEnd.getDate() + 7);
+        } else {
+          currentPeriodEnd.setDate(currentPeriodEnd.getDate() + 30); // monthly
+        }
         user.subscriptionExpires = currentPeriodEnd;
         
         await user.save();
@@ -410,7 +397,6 @@ const handlePaymentIntentSucceeded = async (paymentIntent) => {
     console.log("No userId found in customer metadata");
   }
 };
-
 const handleSubscriptionUpdate = async (subscription) => {
   const userId = subscription.metadata?.userId;
   const planType = subscription.metadata?.planType;
