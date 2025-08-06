@@ -41,6 +41,7 @@
 
 
 //server.js
+//server.js
 
 import express from "express";
 import dotenv from "dotenv";
@@ -56,6 +57,8 @@ import linkRoutes from './routes/linkRoutes.js';
 import analyticsRoutes from './routes/analyticsRoutes.js';
 import paymentRoutes from './routes/paymentRoutes.js';
 import subscriptionRoutes from './routes/subscriptionRoutes.js';
+import { handleWebhook } from './controllers/paymentController.js';
+import bodyParser from 'body-parser';
 
 dotenv.config();
 const app = express();
@@ -70,8 +73,8 @@ app.use("/api", themeRoutes); // matches /api/theme
 app.use("/api/links", linkRoutes);
 app.use("/api", analyticsRoutes);
 
-// Register the webhook route BEFORE express.json()
-app.use("/api/payment/webhook", paymentRoutes); // Only for webhook
+// Register the webhook route directly BEFORE express.json()
+app.post('/api/payment/webhook', bodyParser.raw({ type: 'application/json' }), handleWebhook);
 
 // Now apply express.json() for all other routes
 app.use(express.json());
