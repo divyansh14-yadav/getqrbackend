@@ -49,7 +49,7 @@ export const createCheckoutSession = async (req, res) => {
       //   userId: userId,
       //   planType: planType
       // },
-      subscription: {
+      subscription_data: {
         metadata: {
           userId: userId,
           planType: planType
