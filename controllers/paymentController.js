@@ -268,11 +268,10 @@ export const createCheckoutSession = async (req, res) => {
       
       success_url: `http://localhost:5173/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `http://localhost:5173/cancel`,
-      customer_email: user.email,
-      // metadata: {
-      //   userId: userId,
-      //   planType: planType
-      // },
+      metadata: {
+        userId: userId,
+        planType: planType
+      },
       subscription_data: {
         metadata: {
           userId: userId,
