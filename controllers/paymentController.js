@@ -176,6 +176,10 @@ const handleSubscriptionUpdate = async (subscription) => {
   }
 
   const user = await User.findById(userId);
+  if (!user) {
+    console.error([Webhook] No user found with userId: ${userId});
+    return;
+  }
 
   // Calculate subscription expiration
   const currentPeriodEnd = new Date(subscription.current_period_end * 1000);
@@ -189,7 +193,6 @@ const handleSubscriptionUpdate = async (subscription) => {
   await user.save();
   console.log([Webhook] Subscription updated for userId: ${userId}, planType: ${planType}, expires: ${currentPeriodEnd});
 };
-
 const handleSubscriptionCancellation = async (subscription) => {
   const userId = subscription.metadata?.userId;
   if (!userId) return;
