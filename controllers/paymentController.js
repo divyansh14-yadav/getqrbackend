@@ -206,7 +206,6 @@
 
 
 
-
 import Stripe from 'stripe';
 import User from '../models/User.js';
 import dotenv from "dotenv"
@@ -241,9 +240,25 @@ export const createCheckoutSession = async (req, res) => {
       return res.status(500).json({ message: 'Price ID not configured for this plan.' });
     }
 
+    // Ensure Stripe customer exists and has userId in metadata
+    let customer;
+    if (user.stripeCustomerId) {
+      customer = await stripe.customers.update(user.stripeCustomerId, {
+        metadata: { userId }
+      });
+    } else {
+      customer = await stripe.customers.create({
+        email: user.email,
+        metadata: { userId }
+      });
+      user.stripeCustomerId = customer.id;
+      await user.save();
+    }
+
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
       mode: 'subscription',
+      customer: customer.id, // Use the customer with metadata
       line_items: [
         {
           price: priceId,
