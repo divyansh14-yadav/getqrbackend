@@ -370,7 +370,7 @@ const handlePaymentIntentSucceeded = async (paymentIntent) => {
     const user = await User.findById(userId);
     if (user) {
       if (paymentIntent.description === "Subscription creation") {
-        let planType = ""; // default
+        let planType = null;
 
         // Try to get subscription from latest charge->invoice->subscription
         if (paymentIntent.latest_charge) {
@@ -380,12 +380,17 @@ const handlePaymentIntentSucceeded = async (paymentIntent) => {
               const invoice = await stripe.invoices.retrieve(charge.invoice);
               if (invoice.subscription) {
                 const subscription = await stripe.subscriptions.retrieve(invoice.subscription);
-                planType = subscription.metadata?.planType || "";
+                planType = subscription.metadata?.planType;
               }
             }
           } catch (err) {
             console.log("Could not retrieve subscription metadata, using default");
           }
+        }
+
+        // Fallback if planType is not set or invalid
+        if (!planType || !["weekly", "monthly"].includes(planType)) {
+          planType = "monthly";
         }
 
         user.subscription = planType;
@@ -411,6 +416,7 @@ const handlePaymentIntentSucceeded = async (paymentIntent) => {
     console.log("No userId found in customer metadata");
   }
 };
+
 const handleSubscriptionUpdate = async (subscription) => {
   const userId = subscription.metadata?.userId;
   const planType = subscription.metadata?.planType;
